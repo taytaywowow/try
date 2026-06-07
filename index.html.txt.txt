@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>台鐵旅行骰</title>
+
+  <style>
+    body {
+      font-family: Arial, "Noto Sans TC", sans-serif;
+      background: #f5efe7;
+      color: #2f2f2f;
+      margin: 0;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .app {
+      max-width: 440px;
+      margin: 0 auto;
+      background: white;
+      padding: 28px;
+      border-radius: 28px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+
+    .tag {
+      display: inline-block;
+      background: #eee4d8;
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-size: 14px;
+      margin-bottom: 16px;
+      color: #6f5844;
+    }
+
+    h1 {
+      font-size: 30px;
+      margin: 12px 0;
+    }
+
+    .subtitle {
+      color: #777;
+      line-height: 1.7;
+      margin-bottom: 28px;
+      font-size: 17px;
+    }
+
+    .start-box {
+      background: #f8f3ec;
+      border-radius: 18px;
+      padding: 16px;
+      margin-bottom: 24px;
+      font-size: 18px;
+    }
+
+    .dice {
+      font-size: 58px;
+      margin: 20px 0 12px;
+    }
+
+    button {
+      border: none;
+      background: #2f2f2f;
+      color: white;
+      padding: 14px 22px;
+      border-radius: 999px;
+      font-size: 16px;
+      cursor: pointer;
+      margin: 6px;
+    }
+
+    button:hover {
+      background: #555;
+    }
+
+    button:disabled {
+      background: #bbb;
+      cursor: not-allowed;
+    }
+
+    .secondary-btn {
+      background: #8a6f55;
+    }
+
+    .result {
+      margin-top: 28px;
+      padding: 24px;
+      background: #f2eee7;
+      border-radius: 22px;
+      display: none;
+    }
+
+    .step-title {
+      font-size: 15px;
+      color: #8a6f55;
+      margin-bottom: 8px;
+    }
+
+    .direction {
+      font-size: 42px;
+      font-weight: bold;
+      margin-bottom: 18px;
+    }
+
+    .station-name {
+      font-size: 42px;
+      font-weight: bold;
+      margin: 12px 0;
+    }
+
+    .note {
+      color: #666;
+      line-height: 1.8;
+      font-size: 16px;
+    }
+
+    .status {
+      margin-top: 18px;
+      color: #777;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    .history {
+      margin-top: 24px;
+      text-align: left;
+      font-size: 15px;
+      color: #666;
+      display: none;
+    }
+
+    .history h3 {
+      font-size: 16px;
+      color: #333;
+    }
+
+    .history ul {
+      padding-left: 20px;
+      line-height: 1.8;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <div class="tag">集合地點：板橋車站</div>
+
+    <h1>台鐵旅行骰</h1>
+
+    <p class="subtitle">
+      先骰出旅行方向，<br>
+      再從台鐵車站中抽出目的地。
+    </p>
+
+    <div class="start-box">
+      今日出發點：<strong>板橋車站</strong>
+    </div>
+
+    <div class="dice" id="dice">🎲</div>
+
+    <button onclick="rollDirection()" id="directionButton" disabled>
+      第一骰：決定方向
+    </button>
+
+    <button class="secondary-btn" onclick="rollStation()" id="stationButton" disabled>
+      第二骰：抽目的地
+    </button>
+
+    <div class="status" id="statusText">正在讀取台鐵車站資料...</div>
+
+    <div class="result" id="result">
+      <div class="step-title">你的旅行方向</div>
+      <div class="direction" id="directionText">等待第一骰</div>
+
+      <div class="step-title">你的目的地</div>
+      <div class="station-name" id="stationName">等待第二骰</div>
+
+      <div class="note" id="noteText"></div>
+    </div>
+
+    <div class="history" id="history">
+      <h3>本次抽籤紀錄</h3>
+      <ul id="historyList"></ul>
+    </div>
+  </div>
+
+  <script src="./stations.js"></script>
+
+  <script>
+    let allStations = [];
+    let currentDirection = "";
+    let currentPool = [];
+
+    const history = [];
+
+    const directions = ["北", "東", "南", "西"];
+
+    init();
+
+    function init() {
+      try {
+        if (typeof TRA_RAW_STATIONS === "undefined") {
+          throw new Error("找不到 TRA_RAW_STATIONS，請確認 stations.js 是否正確。");
+        }
+
+        const rows = getRowsFromJson(TRA_RAW_STATIONS);
+
+        allStations = rows
+          .map(normalizeStation)
+          .filter(station => station.name)
+          .filter(station => station.name !== "板橋")
+          .filter(station => getDirectionFromStation(station) !== "");
+
+        if (allStations.length === 0) {
+          throw new Error("沒有讀到有效車站資料。");
+        }
+
+        const counts = countDirections();
+
+        document.getElementById("statusText").innerHTML = `
+          已載入 ${allStations.length} 個台鐵車站<br>
+          北方 ${counts["北"]} 站｜東方 ${counts["東"]} 站｜南方 ${counts["南"]} 站｜西方 ${counts["西"]} 站
+        `;
+
+        document.getElementById("directionButton").disabled = false;
+
+      } catch (error) {
+        console.error(error);
+
+        document.getElementById("statusText").innerHTML = `
+          讀取失敗。<br>
+          請確認 index.html 和 stations.js 放在同一個資料夾，<br>
+          且 stations.js 開頭有 const TRA_RAW_STATIONS =
+        `;
+      }
+    }
+
+    function getRowsFromJson(rawData) {
+      if (Array.isArray(rawData)) {
+        return rawData;
+      }
+
+      if (Array.isArray(rawData.data)) {
+        return rawData.data;
+      }
+
+      if (Array.isArray(rawData.result)) {
+        return rawData.result;
+      }
+
+      if (Array.isArray(rawData.records)) {
+        return rawData.records;
+      }
+
+      const firstArray = Object.values(rawData).find(value => Array.isArray(value));
+      return firstArray || [];
+    }
+
+    function normalizeStation(row) {
+      const name =
+        row.stationName ||
+        row.StationName ||
+        row.name ||
+        row.Name ||
+        "";
+
+      const code =
+        row.stationCode ||
+        row.StationCode ||
+        row.code ||
+        row.Code ||
+        "";
+
+      const address =
+        row.stationAddrTw ||
+        row.StationAddrTw ||
+        row.stationAddress ||
+        row.StationAddress ||
+        row.address ||
+        row.Address ||
+        row.addr ||
+        row.Addr ||
+        "";
+
+      const gpsText =
+        row.gps ||
+        row.GPS ||
+        row.position ||
+        row.Position ||
+        "";
+
+      const gps = parseGps(gpsText);
+
+      return {
+        code: String(code).trim(),
+        name: cleanStationName(name),
+        address: String(address).trim(),
+        city: getCityFromAddress(address),
+        lat: gps ? gps.lat : null,
+        lng: gps ? gps.lng : null
+      };
+    }
+
+    function cleanStationName(name) {
+      return String(name)
+        .replace("車站", "")
+        .replace("站", "")
+        .trim();
+    }
+
+    function getCityFromAddress(address) {
+      const text = String(address);
+
+      const cities = [
+        "基隆市",
+        "臺北市", "台北市",
+        "新北市",
+        "桃園市",
+        "新竹市",
+        "新竹縣",
+        "苗栗縣",
+        "臺中市", "台中市",
+        "彰化縣",
+        "南投縣",
+        "雲林縣",
+        "嘉義市",
+        "嘉義縣",
+        "臺南市", "台南市",
+        "高雄市",
+        "屏東縣",
+        "宜蘭縣",
+        "花蓮縣",
+        "臺東縣", "台東縣"
+      ];
+
+      const found = cities.find(city => text.includes(city));
+
+      if (!found) {
+        return "";
+      }
+
+      return found
+        .replace("台北市", "臺北市")
+        .replace("台中市", "臺中市")
+        .replace("台南市", "臺南市")
+        .replace("台東縣", "臺東縣");
+    }
+
+    function parseGps(gpsText) {
+      const numbers = String(gpsText).match(/-?\d+(\.\d+)?/g);
+
+      if (!numbers || numbers.length < 2) {
+        return null;
+      }
+
+      const first = Number(numbers[0]);
+      const second = Number(numbers[1]);
+
+      if (first >= 21 && first <= 26 && second >= 119 && second <= 123) {
+        return {
+          lat: first,
+          lng: second
+        };
+      }
+
+      if (second >= 21 && second <= 26 && first >= 119 && first <= 123) {
+        return {
+          lat: second,
+          lng: first
+        };
+      }
+
+      return null;
+    }
+
+    function getDirectionFromStation(station) {
+      const northCities = [
+        "基隆市",
+        "臺北市",
+        "新北市"
+      ];
+
+      const eastCities = [
+        "宜蘭縣",
+        "花蓮縣",
+        "臺東縣"
+      ];
+
+      const westCities = [
+        "桃園市",
+        "新竹市",
+        "新竹縣",
+        "苗栗縣"
+      ];
+
+      const southCities = [
+        "臺中市",
+        "彰化縣",
+        "南投縣",
+        "雲林縣",
+        "嘉義市",
+        "嘉義縣",
+        "臺南市",
+        "高雄市",
+        "屏東縣"
+      ];
+
+      if (northCities.includes(station.city)) {
+        return "北";
+      }
+
+      if (eastCities.includes(station.city)) {
+        return "東";
+      }
+
+      if (westCities.includes(station.city)) {
+        return "西";
+      }
+
+      if (southCities.includes(station.city)) {
+        return "南";
+      }
+
+      return getDirectionByStationName(station.name);
+    }
+
+    function getDirectionByStationName(name) {
+      const northStations = [
+        "萬華", "臺北", "台北", "松山", "南港", "汐科", "汐止",
+        "五堵", "百福", "七堵", "八堵", "三坑", "基隆", "暖暖",
+        "四腳亭", "瑞芳", "猴硐", "三貂嶺", "牡丹", "雙溪", "貢寮", "福隆"
+      ];
+
+      const eastStations = [
+        "石城", "大里", "大溪", "龜山", "外澳", "頭城", "頂埔", "礁溪",
+        "四城", "宜蘭", "二結", "中里", "羅東", "冬山", "新馬",
+        "蘇澳新", "蘇澳", "永樂", "東澳", "南澳", "武塔", "漢本",
+        "和平", "和仁", "崇德", "新城", "景美", "北埔", "花蓮",
+        "吉安", "志學", "平和", "壽豐", "豐田", "林榮新光", "南平",
+        "鳳林", "萬榮", "光復", "大富", "富源", "瑞穗", "三民",
+        "玉里", "東里", "東竹", "富里", "池上", "海端", "關山",
+        "瑞和", "瑞源", "鹿野", "山里", "臺東", "台東", "康樂",
+        "知本", "太麻里", "金崙", "瀧溪", "大武", "枋山"
+      ];
+
+      const westStations = [
+        "桃園", "內壢", "中壢", "埔心", "楊梅", "富岡", "新富",
+        "北湖", "湖口", "新豐", "竹北", "北新竹", "新竹", "三姓橋",
+        "香山", "崎頂", "竹南", "談文", "大山", "後龍", "龍港",
+        "白沙屯", "新埔", "通霄", "苑裡", "造橋", "豐富", "苗栗",
+        "南勢", "銅鑼", "三義"
+      ];
+
+      const southStations = [
+        "泰安", "后里", "豐原", "栗林", "潭子", "頭家厝", "松竹",
+        "太原", "精武", "臺中", "台中", "五權", "大慶", "烏日",
+        "新烏日", "成功", "彰化", "花壇", "大村", "員林", "永靖",
+        "社頭", "田中", "二水", "林內", "石榴", "斗六", "斗南",
+        "石龜", "大林", "民雄", "嘉北", "嘉義", "水上", "南靖",
+        "後壁", "新營", "柳營", "林鳳營", "隆田", "拔林", "善化",
+        "南科", "新市", "永康", "大橋", "臺南", "台南", "保安",
+        "仁德", "中洲", "大湖", "路竹", "岡山", "橋頭", "楠梓",
+        "新左營", "左營", "內惟", "美術館", "鼓山", "三塊厝",
+        "高雄", "民族", "科工館", "正義", "鳳山", "後庄",
+        "九曲堂", "六塊厝", "屏東", "歸來", "麟洛", "西勢",
+        "竹田", "潮州", "崁頂", "南州", "鎮安", "林邊", "佳冬",
+        "東海", "枋寮"
+      ];
+
+      if (northStations.includes(name)) {
+        return "北";
+      }
+
+      if (eastStations.includes(name)) {
+        return "東";
+      }
+
+      if (westStations.includes(name)) {
+        return "西";
+      }
+
+      if (southStations.includes(name)) {
+        return "南";
+      }
+
+      return "";
+    }
+
+    function countDirections() {
+      const counts = {
+        "北": 0,
+        "東": 0,
+        "南": 0,
+        "西": 0
+      };
+
+      allStations.forEach(station => {
+        const direction = getDirectionFromStation(station);
+
+        if (counts[direction] !== undefined) {
+          counts[direction]++;
+        }
+      });
+
+      return counts;
+    }
+
+    function rollDirection() {
+      const validDirections = directions.filter(direction => {
+        return allStations.some(station => getDirectionFromStation(station) === direction);
+      });
+
+      const randomIndex = Math.floor(Math.random() * validDirections.length);
+      currentDirection = validDirections[randomIndex];
+
+      currentPool = allStations.filter(station => {
+        return getDirectionFromStation(station) === currentDirection;
+      });
+
+      document.getElementById("dice").textContent = "🎲";
+      document.getElementById("directionText").textContent = currentDirection + "方";
+      document.getElementById("stationName").textContent = "等待第二骰";
+
+      document.getElementById("noteText").innerHTML = `
+        已抽出旅行方向。<br>
+        ${currentDirection}方目前有 ${currentPool.length} 個可抽車站。
+      `;
+
+      document.getElementById("result").style.display = "block";
+      document.getElementById("stationButton").disabled = false;
+    }
+
+    function rollStation() {
+      if (!currentDirection) {
+        alert("請先投第一骰決定方向！");
+        return;
+      }
+
+      if (currentPool.length === 0) {
+        alert("這個方向目前沒有可抽車站，請重新骰方向。");
+        return;
+      }
+
+      const randomIndex = Math.floor(Math.random() * currentPool.length);
+      const selectedStation = currentPool[randomIndex];
+
+      document.getElementById("stationName").textContent = selectedStation.name + "站";
+
+      document.getElementById("noteText").innerHTML = `
+        今日集合地點：板橋車站<br>
+        旅行方向：${currentDirection}方<br>
+        目的地：${selectedStation.name}站
+      `;
+
+      const record = `板橋車站 → ${currentDirection}方 → ${selectedStation.name}站`;
+      history.unshift(record);
+
+      updateHistory();
+    }
+
+    function updateHistory() {
+      const historyBox = document.getElementById("history");
+      const historyList = document.getElementById("historyList");
+
+      historyBox.style.display = "block";
+      historyList.innerHTML = "";
+
+      history.slice(0, 5).forEach(item => {
+        const li = document.createElement("li");
+        li.textContent = item;
+        historyList.appendChild(li);
+      });
+    }
+  </script>
+</body>
+</html>
