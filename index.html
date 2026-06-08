@@ -17,7 +17,7 @@
     }
 
     .app {
-      max-width: 500px;
+      max-width: 520px;
       margin: 0 auto;
       background: white;
       padding: 28px;
@@ -51,7 +51,7 @@
       background: #f8f3ec;
       border-radius: 18px;
       padding: 16px;
-      margin-bottom: 24px;
+      margin-bottom: 18px;
       font-size: 17px;
       line-height: 1.8;
     }
@@ -67,8 +67,36 @@
     }
 
     .dice {
-      font-size: 58px;
+      font-size: 66px;
       margin: 20px 0 12px;
+      display: inline-block;
+      transition: transform 0.2s ease;
+    }
+
+    .dice.rolling {
+      animation: diceRoll 0.12s infinite linear;
+    }
+
+    @keyframes diceRoll {
+      0% {
+        transform: rotate(0deg) scale(1);
+      }
+
+      25% {
+        transform: rotate(12deg) scale(1.12);
+      }
+
+      50% {
+        transform: rotate(-12deg) scale(1.05);
+      }
+
+      75% {
+        transform: rotate(8deg) scale(1.12);
+      }
+
+      100% {
+        transform: rotate(0deg) scale(1);
+      }
     }
 
     button {
@@ -119,7 +147,7 @@
       margin-bottom: 14px;
     }
 
-    .direction {
+    .region {
       font-size: 42px;
       font-weight: bold;
       margin-bottom: 18px;
@@ -191,25 +219,27 @@
     </div>
 
     <div class="rule-box">
-      北方：基隆<br>
-      東方：宜蘭、花蓮、臺東<br>
-      西方：桃園、新竹、苗栗<br>
-      南方：臺中以南
+      北部：基隆、宜蘭、桃園、新竹<br>
+      中部：苗栗、臺中、彰化、南投、雲林<br>
+      南部：嘉義、臺南、高雄、屏東<br>
+      東部：花蓮、臺東
     </div>
 
     <div class="dice" id="dice">🎲</div>
 
-    <button onclick="rollDirection()" id="directionButton" disabled>
-      第一骰：決定方向
-    </button>
+    <div>
+      <button onclick="rollRegion()" id="regionButton" disabled>
+        第一骰：決定區域
+      </button>
 
-    <button class="secondary-btn" onclick="rollStation()" id="stationButton" disabled>
-      第二骰：抽目的地
-    </button>
+      <button class="secondary-btn" onclick="rollStation()" id="stationButton" disabled>
+        第二骰：抽目的地
+      </button>
 
-    <button class="reset-btn" onclick="resetGame()">
-      重新開始
-    </button>
+      <button class="reset-btn" onclick="resetGame()">
+        重新開始
+      </button>
+    </div>
 
     <div class="status" id="statusText">正在讀取台鐵車站資料...</div>
 
@@ -219,8 +249,8 @@
       <div class="step-title">出發點</div>
       <div class="note" id="originText">板橋車站</div>
 
-      <div class="step-title">旅行方向</div>
-      <div class="direction" id="directionText">等待第一骰</div>
+      <div class="step-title">抽中區域</div>
+      <div class="region" id="regionText">等待第一骰</div>
 
       <div class="step-title">目的地</div>
       <div class="station-name" id="stationName">等待第二骰</div>
@@ -246,11 +276,14 @@
     const maxPeople = 3;
 
     let currentOrigin = null;
-    let currentDirection = "";
+    let currentRegion = "";
     let currentPool = [];
 
+    let isRolling = false;
+
     const history = [];
-    const directions = ["北", "東", "南", "西"];
+    const regions = ["北部", "中部", "南部", "東部"];
+    const diceFaces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
 
     init();
 
@@ -281,7 +314,7 @@
         destinationStations = allStations
           .filter(station => station.name !== "板橋")
           .filter(station => !isExcludedDestination(station))
-          .filter(station => getTravelDirection(station) !== "");
+          .filter(station => getTravelRegion(station) !== "");
 
         if (destinationStations.length === 0) {
           throw new Error("沒有可抽的目的地資料。");
@@ -290,7 +323,7 @@
         updateStatus();
         updateCurrentOriginText();
 
-        document.getElementById("directionButton").disabled = false;
+        document.getElementById("regionButton").disabled = false;
 
       } catch (error) {
         console.error(error);
@@ -386,18 +419,18 @@
         "基隆市",
         "臺北市", "台北市",
         "新北市",
-        "桃園市",
+        "桃園市", "桃園縣",
         "新竹市",
         "新竹縣",
         "苗栗縣",
-        "臺中市", "台中市",
+        "臺中市", "台中市", "臺中縣", "台中縣",
         "彰化縣",
         "南投縣",
         "雲林縣",
         "嘉義市",
         "嘉義縣",
-        "臺南市", "台南市",
-        "高雄市",
+        "臺南市", "台南市", "臺南縣", "台南縣",
+        "高雄市", "高雄縣",
         "屏東縣",
         "宜蘭縣",
         "花蓮縣",
@@ -416,8 +449,16 @@
     function normalizeCityName(city) {
       return String(city)
         .replace("台北市", "臺北市")
+        .replace("臺北縣", "新北市")
+        .replace("台北縣", "新北市")
+        .replace("桃園縣", "桃園市")
         .replace("台中市", "臺中市")
+        .replace("臺中縣", "臺中市")
+        .replace("台中縣", "臺中市")
         .replace("台南市", "臺南市")
+        .replace("臺南縣", "臺南市")
+        .replace("台南縣", "臺南市")
+        .replace("高雄縣", "高雄市")
         .replace("台東縣", "臺東縣");
     }
 
@@ -501,86 +542,77 @@
       return "";
     }
 
-    function getTravelDirection(station) {
+    function getTravelRegion(station) {
       const northCities = [
-        "基隆市"
-      ];
-
-      const eastCities = [
+        "臺北市",
+        "新北市",
+        "基隆市",
         "宜蘭縣",
-        "花蓮縣",
-        "臺東縣"
-      ];
-
-      const westCities = [
         "桃園市",
         "新竹市",
-        "新竹縣",
-        "苗栗縣"
+        "新竹縣"
       ];
 
-      const southCities = [
+      const centralCities = [
+        "苗栗縣",
         "臺中市",
         "彰化縣",
         "南投縣",
-        "雲林縣",
+        "雲林縣"
+      ];
+
+      const southCities = [
         "嘉義市",
         "嘉義縣",
         "臺南市",
         "高雄市",
-        "屏東縣"
+        "屏東縣",
+        "澎湖縣"
+      ];
+
+      const eastCities = [
+        "花蓮縣",
+        "臺東縣"
       ];
 
       if (northCities.includes(station.city)) {
-        return "北";
+        return "北部";
       }
 
-      if (eastCities.includes(station.city)) {
-        return "東";
-      }
-
-      if (westCities.includes(station.city)) {
-        return "西";
+      if (centralCities.includes(station.city)) {
+        return "中部";
       }
 
       if (southCities.includes(station.city)) {
-        return "南";
+        return "南部";
       }
 
-      return getDirectionByStationName(station.name);
+      if (eastCities.includes(station.city)) {
+        return "東部";
+      }
+
+      return getRegionByStationName(station.name);
     }
 
-    function getDirectionByStationName(name) {
+    function getRegionByStationName(name) {
       const northStations = [
-        "基隆", "三坑", "八堵", "七堵", "百福", "五堵", "暖暖"
+        "基隆", "三坑", "八堵", "七堵", "百福", "五堵", "暖暖",
+        "宜蘭", "四城", "礁溪", "頂埔", "頭城", "外澳", "龜山", "大溪", "大里", "石城",
+        "桃園", "內壢", "中壢", "埔心", "楊梅", "富岡", "新富", "北湖", "湖口",
+        "新豐", "竹北", "北新竹", "新竹", "三姓橋", "香山"
       ];
 
-      const eastStations = [
-        "石城", "大里", "大溪", "龜山", "外澳", "頭城", "頂埔", "礁溪",
-        "四城", "宜蘭", "二結", "中里", "羅東", "冬山", "新馬",
-        "蘇澳新", "蘇澳", "永樂", "東澳", "南澳", "武塔", "漢本",
-        "和平", "和仁", "崇德", "新城", "景美", "北埔", "花蓮",
-        "吉安", "志學", "平和", "壽豐", "豐田", "林榮新光", "南平",
-        "鳳林", "萬榮", "光復", "大富", "富源", "瑞穗", "三民",
-        "玉里", "東里", "東竹", "富里", "池上", "海端", "關山",
-        "瑞和", "瑞源", "鹿野", "山里", "臺東", "台東", "康樂",
-        "知本", "太麻里", "金崙", "瀧溪", "大武", "枋山"
-      ];
-
-      const westStations = [
-        "桃園", "內壢", "中壢", "埔心", "楊梅", "富岡", "新富",
-        "北湖", "湖口", "新豐", "竹北", "北新竹", "新竹", "三姓橋",
-        "香山", "崎頂", "竹南", "談文", "大山", "後龍", "龍港",
-        "白沙屯", "新埔", "通霄", "苑裡", "造橋", "豐富", "苗栗",
-        "南勢", "銅鑼", "三義"
+      const centralStations = [
+        "崎頂", "竹南", "談文", "大山", "後龍", "龍港", "白沙屯", "新埔", "通霄", "苑裡",
+        "造橋", "豐富", "苗栗", "南勢", "銅鑼", "三義",
+        "泰安", "后里", "豐原", "栗林", "潭子", "頭家厝", "松竹",
+        "太原", "精武", "臺中", "台中", "五權", "大慶", "烏日", "新烏日", "成功",
+        "彰化", "花壇", "大村", "員林", "永靖", "社頭", "田中", "二水",
+        "林內", "石榴", "斗六", "斗南", "石龜"
       ];
 
       const southStations = [
-        "泰安", "后里", "豐原", "栗林", "潭子", "頭家厝", "松竹",
-        "太原", "精武", "臺中", "台中", "五權", "大慶", "烏日",
-        "新烏日", "成功", "彰化", "花壇", "大村", "員林", "永靖",
-        "社頭", "田中", "二水", "林內", "石榴", "斗六", "斗南",
-        "石龜", "大林", "民雄", "嘉北", "嘉義", "水上", "南靖",
+        "大林", "民雄", "嘉北", "嘉義", "水上", "南靖",
         "後壁", "新營", "柳營", "林鳳營", "隆田", "拔林", "善化",
         "南科", "新市", "永康", "大橋", "臺南", "台南", "保安",
         "仁德", "中洲", "大湖", "路竹", "岡山", "橋頭", "楠梓",
@@ -588,114 +620,177 @@
         "高雄", "民族", "科工館", "正義", "鳳山", "後庄",
         "九曲堂", "六塊厝", "屏東", "歸來", "麟洛", "西勢",
         "竹田", "潮州", "崁頂", "南州", "鎮安", "林邊", "佳冬",
-        "東海", "枋寮"
+        "東海", "枋寮", "枋山"
+      ];
+
+      const eastStations = [
+        "花蓮", "北埔", "景美", "新城", "崇德", "和仁", "和平",
+        "漢本", "武塔", "南澳", "東澳", "永樂", "蘇澳", "蘇澳新",
+        "新馬", "冬山", "羅東", "中里", "二結",
+        "吉安", "志學", "平和", "壽豐", "豐田", "林榮新光",
+        "南平", "鳳林", "萬榮", "光復", "大富", "富源",
+        "瑞穗", "三民", "玉里", "東里", "東竹", "富里",
+        "池上", "海端", "關山", "瑞和", "瑞源", "鹿野", "山里",
+        "臺東", "台東", "康樂", "知本", "太麻里", "金崙", "瀧溪", "大武"
       ];
 
       if (northStations.includes(name)) {
-        return "北";
+        return "北部";
       }
 
-      if (eastStations.includes(name)) {
-        return "東";
-      }
-
-      if (westStations.includes(name)) {
-        return "西";
+      if (centralStations.includes(name)) {
+        return "中部";
       }
 
       if (southStations.includes(name)) {
-        return "南";
+        return "南部";
+      }
+
+      if (eastStations.includes(name)) {
+        return "東部";
       }
 
       return "";
     }
 
-    function rollDirection() {
+    function animateDice(callback) {
+      if (isRolling) {
+        return;
+      }
+
+      isRolling = true;
+
+      const dice = document.getElementById("dice");
+      dice.classList.add("rolling");
+
+      let counter = 0;
+
+      const interval = setInterval(() => {
+        const randomIndex = Math.floor(Math.random() * diceFaces.length);
+        dice.textContent = diceFaces[randomIndex];
+        counter++;
+
+        if (counter >= 14) {
+          clearInterval(interval);
+
+          const finalIndex = Math.floor(Math.random() * diceFaces.length);
+          dice.textContent = diceFaces[finalIndex];
+          dice.classList.remove("rolling");
+
+          isRolling = false;
+          callback();
+        }
+      }, 80);
+    }
+
+    function setButtonsDuringRoll(disabled) {
+      document.getElementById("regionButton").disabled = disabled || currentPerson > maxPeople;
+      document.getElementById("stationButton").disabled = disabled || !currentRegion;
+    }
+
+    function rollRegion() {
+      if (isRolling) {
+        return;
+      }
+
       if (currentPerson > maxPeople) {
         alert("三位都已經骰完了，請按重新開始。");
         return;
       }
 
-      const validDirections = directions.filter(direction => {
-        return destinationStations.some(station => {
-          return getTravelDirection(station) === direction &&
+      document.getElementById("regionButton").disabled = true;
+      document.getElementById("stationButton").disabled = true;
+
+      animateDice(() => {
+        const validRegions = regions.filter(region => {
+          return destinationStations.some(station => {
+            return getTravelRegion(station) === region &&
+                   !isAlreadyVisited(station.name);
+          });
+        });
+
+        if (validRegions.length === 0) {
+          alert("目前沒有可抽目的地，請重新開始。");
+          return;
+        }
+
+        const randomIndex = Math.floor(Math.random() * validRegions.length);
+        currentRegion = validRegions[randomIndex];
+
+        currentPool = destinationStations.filter(station => {
+          return getTravelRegion(station) === currentRegion &&
                  !isAlreadyVisited(station.name);
         });
+
+        document.getElementById("result").style.display = "block";
+        document.getElementById("personText").textContent = `第 ${currentPerson} 人`;
+        document.getElementById("originText").textContent = currentOrigin.name + "車站";
+        document.getElementById("regionText").textContent = currentRegion;
+        document.getElementById("stationName").textContent = "等待第二骰";
+
+        document.getElementById("noteText").innerHTML = `
+          目前從 ${currentOrigin.name}車站 出發。<br>
+          ${currentRegion}目前有 ${currentPool.length} 個可抽車站。
+        `;
+
+        document.getElementById("stationButton").disabled = false;
+        document.getElementById("regionButton").disabled = true;
       });
-
-      if (validDirections.length === 0) {
-        alert("目前沒有可抽目的地，請重新開始。");
-        return;
-      }
-
-      const randomIndex = Math.floor(Math.random() * validDirections.length);
-      currentDirection = validDirections[randomIndex];
-
-      currentPool = destinationStations.filter(station => {
-        return getTravelDirection(station) === currentDirection &&
-               !isAlreadyVisited(station.name);
-      });
-
-      document.getElementById("result").style.display = "block";
-      document.getElementById("personText").textContent = `第 ${currentPerson} 人`;
-      document.getElementById("originText").textContent = currentOrigin.name + "車站";
-      document.getElementById("directionText").textContent = currentDirection + "方";
-      document.getElementById("stationName").textContent = "等待第二骰";
-
-      document.getElementById("noteText").innerHTML = `
-        目前從 ${currentOrigin.name}車站 出發。<br>
-        ${currentDirection}方目前有 ${currentPool.length} 個可抽車站。
-      `;
-
-      document.getElementById("stationButton").disabled = false;
-      document.getElementById("directionButton").disabled = true;
     }
 
     function rollStation() {
-      if (!currentDirection) {
-        alert("請先投第一骰決定方向！");
+      if (isRolling) {
+        return;
+      }
+
+      if (!currentRegion) {
+        alert("請先投第一骰決定區域！");
         return;
       }
 
       if (currentPool.length === 0) {
-        alert("這個方向目前沒有可抽車站，請重新骰方向。");
+        alert("這個區域目前沒有可抽車站，請重新骰區域。");
         return;
       }
 
-      const randomIndex = Math.floor(Math.random() * currentPool.length);
-      const selectedStation = currentPool[randomIndex];
-
-      document.getElementById("stationName").textContent = selectedStation.name + "站";
-
-      document.getElementById("noteText").innerHTML = `
-        第 ${currentPerson} 人路線：<br>
-        ${currentOrigin.name}車站 → ${currentDirection}方 → ${selectedStation.name}站
-      `;
-
-      history.push({
-        person: currentPerson,
-        from: currentOrigin.name,
-        direction: currentDirection,
-        to: selectedStation.name
-      });
-
-      updateHistory();
-
-      currentOrigin = selectedStation;
-      currentPerson++;
-      currentDirection = "";
-      currentPool = [];
-
-      updateCurrentOriginText();
-
+      document.getElementById("regionButton").disabled = true;
       document.getElementById("stationButton").disabled = true;
 
-      if (currentPerson > maxPeople) {
-        finishGame();
-      } else {
-        document.getElementById("directionButton").disabled = false;
-        document.getElementById("personText").textContent = `下一位：第 ${currentPerson} 人`;
-      }
+      animateDice(() => {
+        const randomIndex = Math.floor(Math.random() * currentPool.length);
+        const selectedStation = currentPool[randomIndex];
+
+        document.getElementById("stationName").textContent = selectedStation.name + "站";
+
+        document.getElementById("noteText").innerHTML = `
+          第 ${currentPerson} 人路線：<br>
+          ${currentOrigin.name}車站 → ${currentRegion} → ${selectedStation.name}站
+        `;
+
+        history.push({
+          person: currentPerson,
+          from: currentOrigin.name,
+          region: currentRegion,
+          to: selectedStation.name
+        });
+
+        updateHistory();
+
+        currentOrigin = selectedStation;
+        currentPerson++;
+        currentRegion = "";
+        currentPool = [];
+
+        updateCurrentOriginText();
+
+        if (currentPerson > maxPeople) {
+          finishGame();
+        } else {
+          document.getElementById("regionButton").disabled = false;
+          document.getElementById("stationButton").disabled = true;
+          document.getElementById("personText").textContent = `下一位：第 ${currentPerson} 人`;
+        }
+      });
     }
 
     function updateHistory() {
@@ -708,7 +803,7 @@
       history.forEach(item => {
         const li = document.createElement("li");
         li.textContent =
-          `第 ${item.person} 人：${item.from}車站 → ${item.direction}方 → ${item.to}站`;
+          `第 ${item.person} 人：${item.from}車站 → ${item.region} → ${item.to}站`;
         historyList.appendChild(li);
       });
     }
@@ -724,17 +819,17 @@
       }).length;
 
       const counts = {
-        "北": 0,
-        "東": 0,
-        "南": 0,
-        "西": 0
+        "北部": 0,
+        "中部": 0,
+        "南部": 0,
+        "東部": 0
       };
 
       destinationStations.forEach(station => {
-        const direction = getTravelDirection(station);
+        const region = getTravelRegion(station);
 
-        if (counts[direction] !== undefined) {
-          counts[direction]++;
+        if (counts[region] !== undefined) {
+          counts[region]++;
         }
       });
 
@@ -742,7 +837,7 @@
         已載入 ${allStations.length} 個台鐵車站<br>
         已排除臺北市、新北市目的地 ${excludedCount} 站<br>
         目前可抽目的地 ${destinationStations.length} 站<br>
-        北方 ${counts["北"]} 站｜東方 ${counts["東"]} 站｜西方 ${counts["西"]} 站｜南方 ${counts["南"]} 站
+        北部 ${counts["北部"]} 站｜中部 ${counts["中部"]} 站｜南部 ${counts["南部"]} 站｜東部 ${counts["東部"]} 站
       `;
     }
 
@@ -751,7 +846,7 @@
     }
 
     function finishGame() {
-      document.getElementById("directionButton").disabled = true;
+      document.getElementById("regionButton").disabled = true;
       document.getElementById("stationButton").disabled = true;
 
       const route = ["板橋"].concat(history.map(item => item.to)).join(" → ");
@@ -774,18 +869,21 @@
         lng: 121.4638
       };
 
-      currentDirection = "";
+      currentRegion = "";
       currentPool = [];
       history.length = 0;
+      isRolling = false;
 
       document.getElementById("dice").textContent = "🎲";
+      document.getElementById("dice").classList.remove("rolling");
+
       document.getElementById("result").style.display = "none";
       document.getElementById("history").style.display = "none";
       document.getElementById("historyList").innerHTML = "";
       document.getElementById("finishedBox").style.display = "none";
       document.getElementById("finishedBox").innerHTML = "";
 
-      document.getElementById("directionButton").disabled = false;
+      document.getElementById("regionButton").disabled = false;
       document.getElementById("stationButton").disabled = true;
 
       updateCurrentOriginText();
